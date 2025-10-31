@@ -7,308 +7,187 @@ from wordcloud import WordCloud
 from datetime import datetime, timedelta
 from dateutil import parser
 from io import BytesIO
-import json
 
 # -----------------------------
 # Config
 # -----------------------------
-API_KEY = st.secrets.get("AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc")
+API_KEY = st.secrets.get("YOUTUBE_API_KEY", "Enter your API Key here")
 YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
-YOUTUBE_VIDEO_URL = "https://www.googleapis.com/youtube/v3/videos"
 YOUTUBE_CHANNEL_URL = "https://www.googleapis.com/youtube/v3/channels"
+YOUTUBE_PLAYLIST_ITEMS_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
+YOUTUBE_VIDEO_URL = "https://www.googleapis.com/youtube/v3/videos"
 
-st.title("📊 YouTube American History Viral Research Dashboard")
+st.title("📊 Viral New YouTube Channels Finder (Multi-Niche)")
 
 # -----------------------------
 # Inputs
 # -----------------------------
-days = st.number_input("Enter days to search (1–60):", min_value=1, max_value=60, value=30)
-min_views = st.number_input("Minimum views (e.g., 1000000):", min_value=0, value=1000000)
-recent_channel_days = st.number_input("Channel age limit in days:", min_value=1, max_value=120, value=60)
+recent_days = st.number_input("Channel age limit (days)", min_value=1, max_value=120, value=60)
+min_total_views = st.number_input("Minimum channel total views", min_value=0, value=1_000_000)
+min_video_views = st.number_input("Minimum single-video views", min_value=0, value=1_000_000)
+max_channels_per_keyword = st.number_input("Max channels per keyword", min_value=1, max_value=50, value=10)
+videos_to_check_per_channel = st.number_input("Videos to analyze per channel (latest N)", min_value=1, max_value=50, value=10)
 
+# -----------------------------
+# Keywords (Multi-Niche)
+# -----------------------------
 keywords = [
-    # Keywords for Global History niche
-keywords = [
-    # American History
-    "American History", "US History Documentary", "Civil War History",
-    "Founding Fathers", "American Revolution", "Native American History",
-    "World War 2 USA", "Cold War America", "Presidents of USA History",
+    # Astrology & Spirituality
+    "Astrology", "Horoscope", "Zodiac Signs", "Palmistry", "Numerology", "Spiritual Guidance",
+    "Planets Astrology", "Moon Signs", "Astrological Predictions",
 
-    # European History
-    "French Revolution", "Napoleon Bonaparte", "World War 1 History",
-    "World War 2 History", "Roman Empire", "Greek History",
-    "Medieval Europe", "Renaissance History", "Industrial Revolution",
+    # Motivation & Self Help
+    "Motivational Speech", "Self Improvement", "Success Stories", "Inspiration", "Personal Growth",
+    "Life Coaching", "Positive Thinking", "Overcoming Failure",
 
-    # Asian History
-    "Chinese Dynasties", "Great Wall of China", "Mughal Empire",
-    "Indian Independence", "Japanese Samurai History", "Meiji Restoration",
-    "Korean History", "Vietnam War History", "Mongol Empire",
+    # Love & Relationships
+    "Love Advice", "Relationship Tips", "Marriage Advice", "Dating Tips", "Breakup Recovery",
+    "Love and Relationship Stories", "Couple Goals", "Romantic Advice",
 
-    # Middle Eastern & Islamic History
-    "Islamic Golden Age", "Ottoman Empire", "Abbasid Caliphate",
-    "Umayyad Caliphate", "Persian Empire", "Arab History",
-    "Crusades History", "Baghdad History", "Andalusian History",
+    # Cars & Automobiles
+    "Car Reviews", "Luxury Cars", "Electric Cars", "Car Modifications", "Supercars",
+    "Classic Cars", "Car Racing", "Automobile Technology",
 
-    # African History
-    "Ancient Egypt", "Pharaohs History", "Pyramids History",
-    "Mali Empire", "Colonial Africa", "Zulu Kingdom",
-    "Ethiopian Empire", "African Independence Movements",
+    # Airplanes & Aviation
+    "Airplane Takeoff", "Airplane Landing", "Fighter Jets", "Commercial Aviation",
+    "Airplane Technology", "Pilot Training", "Airbus vs Boeing",
 
-    # Global/World History
-    "Ancient Civilizations", "Mesopotamia History", "Mayan Civilization",
-    "Aztec Empire", "Inca Empire", "Cold War History",
-    "History of Colonialism", "History of Slavery", "History of Democracy",
-    "World History Documentary", "History of Empires", "History of Wars"
-]
+    # Sea & Ocean
+    "Sea Exploration", "Deep Sea Creatures", "Ocean Documentary", "Ships and Boats",
+    "Navy Ships", "Submarines", "Marine Life", "Underwater World",
+
+    # Sky & Space
+    "Night Sky", "Astronomy", "Stars and Galaxies", "Milky Way", "Sky Watching",
+    "Space Exploration", "NASA Discoveries", "Black Holes", "Universe Documentary",
+
+    # Planets & Solar System
+    "Planets Documentary", "Mars Exploration", "Moon Landing", "Saturn Rings",
+    "Jupiter Storms", "Solar System", "Exoplanets", "Space Science"
 ]
 
 # -----------------------------
 # Helpers
 # -----------------------------
 def safe_int(x):
-    try:
-        return int(x)
-    except Exception:
-        return 0
+    try: return int(x)
+    except: return 0
 
 def parse_iso(dt_str):
-    # Robust ISO parsing (handles microseconds and no-microseconds)
-    try:
-        return parser.isoparse(dt_str)
-    except Exception:
-        # Last fallback: trim microseconds if present
-        try:
-            clean = dt_str.split(".")[0] + "Z"
-            return datetime.strptime(clean, "%Y-%m-%dT%H:%M:%SZ")
-        except Exception:
-            return None
+    try: return parser.isoparse(dt_str)
+    except: return None
 
 def engagement_rate(likes, comments, views):
     return round(((likes + comments) / views) * 100, 2) if views > 0 else 0.0
 
-def like_ratio(likes, views):
-    return round((likes / views) * 100, 2) if views > 0 else 0.0
-
-def comment_ratio(comments, views):
-    return round((comments / views) * 100, 2) if views > 0 else 0.0
-
-def viral_score(views, er, lr, cr, avg_views):
-    # Balanced, interpretable scoring
-    # Scale views and avg_views to avoid dominance
-    return round((views / 100000) * 1.0 + er * 2.0 + lr * 0.8 + cr * 1.2 + (avg_views / 1000) * 0.5, 2)
+def viral_score(total_views, avg_er, avg_views_video):
+    return round((total_views/1_000_000) + avg_er*2 + (avg_views_video/1000), 2)
 
 def est_earning_usd(views, cpm=3.5):
-    return round((views / 1000.0) * cpm, 2)
+    return round((views/1000.0)*cpm, 2)
 
-def bytes_excel(df, sheet_name="Results"):
-    # Reliable Excel export in-memory
+def bytes_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        df.to_excel(writer, index=False, sheet_name="Channels")
     output.seek(0)
     return output
 
 # -----------------------------
-# Fetch and process
+# Main
 # -----------------------------
-if st.button("Fetch data"):
-    try:
-        start_date = (datetime.utcnow() - timedelta(days=int(days))).isoformat("T") + "Z"
-        channel_age_cutoff = datetime.utcnow() - timedelta(days=int(recent_channel_days))
+if st.button("Fetch Channels"):
+    cutoff_dt = datetime.utcnow() - timedelta(days=int(recent_days))
+    cutoff_iso = cutoff_dt.isoformat("T") + "Z"
 
-        all_rows = []
-        seen_video_ids = set()
+    all_channels = []
+    seen_channels = set()
 
-        for keyword in keywords:
-            st.write(f"🔍 Searching: {keyword}")
+    for kw in keywords:
+        st.write(f"🔎 Searching: {kw}")
+        params = {
+            "part": "snippet",
+            "q": kw,
+            "type": "channel",
+            "order": "date",
+            "publishedAfter": cutoff_iso,
+            "maxResults": int(max_channels_per_keyword),
+            "key": API_KEY,
+        }
+        r = requests.get(YOUTUBE_SEARCH_URL, params=params).json()
+        items = r.get("items", [])
+        channel_ids = [it.get("id", {}).get("channelId") for it in items if it.get("id", {}).get("channelId")]
 
-            search_params = {
-                "part": "snippet",
-                "q": keyword,
-                "type": "video",
-                "order": "viewCount",
-                "publishedAfter": start_date,
-                "maxResults": 10,
-                "key": API_KEY,
-            }
-            r = requests.get(YOUTUBE_SEARCH_URL, params=search_params, timeout=30)
-            search_data = r.json()
+        if not channel_ids: continue
+        c_params = {"part": "statistics,snippet,contentDetails", "id": ",".join(channel_ids), "key": API_KEY}
+        c_resp = requests.get(YOUTUBE_CHANNEL_URL, params=c_params).json()
+        details = c_resp.get("items", [])
 
-            if not search_data.get("items"):
-                continue
+        for ch in details:
+            ch_id = ch.get("id")
+            if not ch_id or ch_id in seen_channels: continue
+            seen_channels.add(ch_id)
 
-            videos = search_data["items"]
-            video_ids = [v["id"]["videoId"] for v in videos if v.get("id", {}).get("videoId")]
-            channel_ids = [v["snippet"]["channelId"] for v in videos if v.get("snippet", {}).get("channelId")]
+            c_snip = ch.get("snippet", {})
+            c_stats = ch.get("statistics", {})
+            c_details = ch.get("contentDetails", {})
 
-            if not video_ids or not channel_ids:
-                continue
+            created_dt = parse_iso(c_snip.get("publishedAt", ""))
+            if not created_dt or created_dt <= cutoff_dt: continue
 
-            # Fetch video stats + snippet
-            v_params = {"part": "statistics,snippet", "id": ",".join(video_ids), "key": API_KEY}
-            v_resp = requests.get(YOUTUBE_VIDEO_URL, params=v_params, timeout=30).json()
-            v_items = v_resp.get("items", [])
+            subs = safe_int(c_stats.get("subscriberCount"))
+            total_views = safe_int(c_stats.get("viewCount"))
+            total_videos = safe_int(c_stats.get("videoCount"))
 
-            # Map video id -> full video data
-            video_map = {vi.get("id"): vi for vi in v_items if vi.get("id")}
+            uploads_id = c_details.get("relatedPlaylists", {}).get("uploads")
+            v_ids = []
+            if uploads_id:
+                v_params = {"part": "snippet", "playlistId": uploads_id, "maxResults": int(videos_to_check_per_channel), "key": API_KEY}
+                v_resp = requests.get(YOUTUBE_PLAYLIST_ITEMS_URL, params=v_params).json()
+                v_ids = [it.get("snippet", {}).get("resourceId", {}).get("videoId") for it in v_resp.get("items", []) if it.get("snippet", {}).get("resourceId", {}).get("videoId")]
 
-            # Fetch channel stats + snippet (contentDetails optional)
-            c_params = {"part": "statistics,snippet", "id": ",".join(set(channel_ids)), "key": API_KEY}
-            c_resp = requests.get(YOUTUBE_CHANNEL_URL, params=c_params, timeout=30).json()
-            c_items = c_resp.get("items", [])
+            v_stats = []
+            if v_ids:
+                vs_params = {"part": "statistics,snippet", "id": ",".join(v_ids), "key": API_KEY}
+                vs_resp = requests.get(YOUTUBE_VIDEO_URL, params=vs_params).json()
+                v_stats = vs_resp.get("items", [])
 
-            # Map channel id -> full channel data
-            channel_map = {ci.get("id"): ci for ci in c_items if ci.get("id")}
-
-            for v in videos:
-                vid = v.get("id", {}).get("videoId")
-                ch_id = v.get("snippet", {}).get("channelId")
-                if not vid or not ch_id or vid in seen_video_ids:
-                    continue
-
-                vi = video_map.get(vid)
-                ci = channel_map.get(ch_id)
-                if not vi or not ci:
-                    continue
-
-                # Video fields
-                v_snippet = vi.get("snippet", {})
-                v_stats = vi.get("statistics", {})
-                title = v_snippet.get("title", "N/A")
-                description = v_snippet.get("description", "") or ""
-                description = description[:400]
-                video_url = f"https://www.youtube.com/watch?v={vid}"
-
-                views = safe_int(v_stats.get("viewCount"))
-                likes = safe_int(v_stats.get("likeCount"))
-                comments = safe_int(v_stats.get("commentCount"))
-                upload_time_raw = v_snippet.get("publishedAt", "")
-                upload_dt = parse_iso(upload_time_raw)
-                upload_time = upload_dt.isoformat() if upload_dt else upload_time_raw or "N/A"
-
-                # Channel fields
-                c_snippet = ci.get("snippet", {})
-                c_stats = ci.get("statistics", {})
-                subs = safe_int(c_stats.get("subscriberCount"))
-                total_views = safe_int(c_stats.get("viewCount"))
-                total_videos = safe_int(c_stats.get("videoCount"))
-                channel_created_raw = c_snippet.get("publishedAt", "")
-                ch_created_dt = parse_iso(channel_created_raw)
-
-                # Filters
-                if views < min_views:
-                    continue
-                if ch_created_dt is None or ch_created_dt <= channel_age_cutoff:
-                    continue
-
-                # Insights
+            sum_views, sum_er, max_views = 0, 0, 0
+            for vi in v_stats:
+                vs = vi.get("statistics", {})
+                views = safe_int(vs.get("viewCount"))
+                likes = safe_int(vs.get("likeCount"))
+                comments = safe_int(vs.get("commentCount"))
                 er = engagement_rate(likes, comments, views)
-                lr = like_ratio(likes, views)
-                cr = comment_ratio(comments, views)
-                avg_views = round(total_views / total_videos, 2) if total_videos > 0 else 0.0
-                weeks_since_creation = max((datetime.utcnow() - ch_created_dt).days / 7.0, 0.0001) if ch_created_dt else 0.0001
-                upload_freq = round(total_videos / weeks_since_creation, 2) if total_videos > 0 else 0.0
-                score = viral_score(views, er, lr, cr, avg_views)
-                earning = est_earning_usd(views, cpm=3.5)
+                sum_views += views
+                sum_er += er
+                max_views = max(max_views, views)
 
-                all_rows.append({
-                    "Title": title,
-                    "Description": description,
-                    "URL": video_url,
-                    "Views": views,
-                    "Likes": likes,
-                    "Comments": comments,
-                    "Engagement Rate (%)": er,
-                    "Like/View Ratio (%)": lr,
-                    "Comment/View Ratio (%)": cr,
-                    "Upload Time": upload_time,
-                    "Subscribers": subs,
-                    "Channel Created": ch_created_dt.isoformat() if ch_created_dt else channel_created_raw or "N/A",
-                    "Avg Views/Video": avg_views,
-                    "Upload Freq (videos/week)": upload_freq,
-                    "Viral Score": score,
-                    "Est. Earning ($)": earning,
-                })
-                seen_video_ids.add(vid)
+            n = max(len(v_stats), 1)
+            avg_views_video = round(sum_views/n, 2)
+            avg_er = round(sum_er/n, 2)
 
-        if not all_rows:
-            st.warning("No matching results for current filters. Try increasing days or lowering min views.")
-            st.stop()
+            if total_views < min_total_views and max_views < min_video_views:
+                continue
 
-        df = pd.DataFrame(all_rows)
-        st.success(f"✅ Found {len(df)} viral American History videos from new channels!")
+            score = viral_score(total_views, avg_er, avg_views_video)
+            earning = est_earning_usd(avg_views_video*30)
 
-        # -----------------------------
-        # Display
-        # -----------------------------
-        st.dataframe(df)
+            all_channels.append({
+                "Channel Title": c_snip.get("title", "N/A"),
+                "Channel URL": f"https://www.youtube.com/channel/{ch_id}",
+                "Subscribers": subs,
+                "Total Views": total_views,
+                "Total Videos": total_videos,
+                "Channel Created": created_dt.isoformat(),
+                "Avg Views/Video": avg_views_video,
+                "Avg Engagement Rate (%)": avg_er,
+                "Max Video Views": max_views,
+                "Viral Score": score,
+                "Est. Monthly Earning ($)": earning,
+            })
 
-        # -----------------------------
-        # Exports
-        # -----------------------------
-        csv_bytes = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📥 Download CSV", data=csv_bytes, file_name="results.csv", mime="text/csv")
-
-        xls_bytes = bytes_excel(df)
-        st.download_button("📊 Download Excel (XLSX)", data=xls_bytes, file_name="results.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-        json_str = df.to_json(orient="records")
-        st.download_button("🗂 Download JSON", data=json_str, file_name="results.json", mime="application/json")
-
-        # -----------------------------
-        # Auto report summary (Top 3)
-        # -----------------------------
-        st.subheader("📌 Auto report summary")
-        top3 = df.sort_values("Viral Score", ascending=False).head(3)
-        for _, row in top3.iterrows():
-            st.markdown(
-                f"- **Title:** {row['Title']}  \n"
-                f"  **Viral Score:** {row['Viral Score']} | **Views:** {row['Views']} | **Subs:** {row['Subscribers']} | **Engagement:** {row['Engagement Rate (%)']}%"
-            )
-
-        # -----------------------------
-        # Keyword cloud (from descriptions)
-        # -----------------------------
-        st.subheader("☁️ Keyword cloud (descriptions)")
-        text_blob = " ".join(df["Description"].astype(str).tolist())
-        if text_blob.strip():
-            wc = WordCloud(width=900, height=400, background_color="white").generate(text_blob)
-            fig, ax = plt.subplots(figsize=(10, 4))
-            ax.imshow(wc, interpolation="bilinear")
-            ax.axis("off")
-            st.pyplot(fig)
-        else:
-            st.info("No description text available to generate a word cloud.")
-
-        # -----------------------------
-        # Visual insights
-        # -----------------------------
-        st.subheader("📊 Visual insights")
-
-        chart1 = alt.Chart(df).mark_circle(size=80).encode(
-            x=alt.X("Views:Q", title="Views"),
-            y=alt.Y("Engagement Rate (%):Q", title="Engagement Rate (%)"),
-            color=alt.Color("Viral Score:Q", scale=alt.Scale(scheme="plasma")),
-            tooltip=["Title", "Views", "Likes", "Comments", "Engagement Rate (%)", "Viral Score"]
-        ).interactive()
-        st.altair_chart(chart1, use_container_width=True)
-
-        chart2 = alt.Chart(df).mark_bar().encode(
-            x=alt.X("Title:N", sort="-y"),
-            y=alt.Y("Views:Q"),
-            color=alt.Color("Subscribers:Q", scale=alt.Scale(scheme="blues")),
-            tooltip=["Title", "Views", "Subscribers"]
-        ).properties(width=800).interactive()
-        st.altair_chart(chart2, use_container_width=True)
-
-        chart3 = alt.Chart(df).mark_circle(size=100).encode(
-            x=alt.X("Subscribers:Q"),
-            y=alt.Y("Views:Q"),
-            size=alt.Size("Engagement Rate (%):Q"),
-            color=alt.Color("Viral Score:Q", scale=alt.Scale(scheme="magma")),
-            tooltip=["Title", "Subscribers", "Views", "Engagement Rate (%)", "Viral Score"]
-        ).interactive()
-        st.altair_chart(chart3, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+    if not all_channels:
+        st.warning("No new viral channels found.")
+    else:
+        df = pd.DataFrame(all_channels)
+        st.success(f"
