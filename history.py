@@ -11,7 +11,7 @@ from io import BytesIO
 # -----------------------------
 # Config
 # -----------------------------
-API_KEY = st.secrets.get("YOUTUBE_API_KEY", "Enter your API Key here")
+API_KEY = st.secrets.get("AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc")
 YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 YOUTUBE_CHANNEL_URL = "https://www.googleapis.com/youtube/v3/channels"
 YOUTUBE_PLAYLIST_ITEMS_URL = "https://www.googleapis.com/youtube/v3/playlistItems"
