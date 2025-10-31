@@ -4,20 +4,14 @@ from datetime import datetime, timedelta
 from dateutil import parser
 import pandas as pd
 
-API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"  # <-- اپنی API key ڈالیں
+API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"
 
-# --------------------------------------------------
-# YouTube API init
-# --------------------------------------------------
 def get_youtube_service():
     return build("youtube", "v3", developerKey=API_KEY)
 
 def sixty_days_ago():
     return datetime.utcnow() - timedelta(days=60)
 
-# --------------------------------------------------
-# Trending videos
-# --------------------------------------------------
 def get_trending_videos(youtube, region_code="US", max_results=50):
     try:
         request = youtube.videos().list(
@@ -32,9 +26,6 @@ def get_trending_videos(youtube, region_code="US", max_results=50):
         st.error(f"Error fetching trending videos: {e}")
         return []
 
-# --------------------------------------------------
-# Channel details
-# --------------------------------------------------
 def get_channel_details(youtube, channel_id):
     try:
         response = youtube.channels().list(
@@ -54,9 +45,6 @@ def get_channel_details(youtube, channel_id):
     except Exception:
         return None
 
-# --------------------------------------------------
-# Process videos safely
-# --------------------------------------------------
 def process_videos(youtube, videos):
     data = []
     cutoff_date = sixty_days_ago()
@@ -80,21 +68,22 @@ def process_videos(youtube, videos):
             continue
 
         channel_created_str = channel_info.get("channel_created")
-        try:
-            # parse date safely
-            channel_created_date = parser.isoparse(channel_created_str) if channel_created_str else None
-        except Exception:
-            channel_created_date = None
+        channel_created_date = None
+        if channel_created_str:
+            try:
+                channel_created_date = parser.isoparse(channel_created_str)
+            except Exception:
+                channel_created_date = None
 
-        # ✅ Fully safe type check
+        # ✅ Skip if invalid
         if not isinstance(channel_created_date, datetime):
             continue
 
-        # Only last 60 days channels
+        # ✅ Skip channels older than 60 days
         if channel_created_date < cutoff_date:
             continue
 
-        # Only videos with 1M+ views
+        # ✅ Skip videos with less than 1M views
         if video_views < 1_000_000:
             continue
 
@@ -113,15 +102,13 @@ def process_videos(youtube, videos):
 
     return pd.DataFrame(data)
 
-# --------------------------------------------------
+# -------------------------
 # Streamlit UI
-# --------------------------------------------------
+# -------------------------
 st.set_page_config(page_title="US New YouTube Channels", page_icon="📺", layout="wide")
 st.title("🇺🇸 US YouTube Channels (Last 60 Days & 1M+ Views)")
 
-st.markdown("""
-یہ ایپ US کے چینلز دکھاتی ہے جو پچھلے 60 دن میں بنے اور جن کی ویڈیوز 1,000,000+ ویوز رکھتی ہیں۔
-""")
+st.markdown("یہ ایپ US کے چینلز دکھاتی ہے جو پچھلے 60 دن میں بنے اور جن کی ویڈیوز 1,000,000+ ویوز رکھتی ہیں۔")
 
 if st.button("🚀 Fetch Latest Videos"):
     with st.spinner("Fetching data from YouTube..."):
