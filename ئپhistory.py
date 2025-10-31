@@ -4,8 +4,11 @@ from datetime import datetime, timedelta
 from dateutil import parser
 import pandas as pd
 
-API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"
+API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"  # ← اپنی API key یہاں ڈالیں
 
+# -------------------------
+# YouTube API Helper Functions
+# -------------------------
 def get_youtube_service():
     return build("youtube", "v3", developerKey=API_KEY)
 
@@ -45,6 +48,9 @@ def get_channel_details(youtube, channel_id):
     except Exception:
         return None
 
+# -------------------------
+# Process Videos (Safe Version)
+# -------------------------
 def process_videos(youtube, videos):
     data = []
     cutoff_date = sixty_days_ago()
@@ -75,15 +81,15 @@ def process_videos(youtube, videos):
             except Exception:
                 channel_created_date = None
 
-        # ✅ Skip if invalid
+        # 🔹 Fully safe checks
+        if channel_created_date is None:
+            continue
         if not isinstance(channel_created_date, datetime):
             continue
-
-        # ✅ Skip channels older than 60 days
         if channel_created_date < cutoff_date:
             continue
 
-        # ✅ Skip videos with less than 1M views
+        # Only videos with 1M+ views
         if video_views < 1_000_000:
             continue
 
