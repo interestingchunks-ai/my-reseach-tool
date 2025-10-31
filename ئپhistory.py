@@ -5,24 +5,24 @@ from dateutil import parser
 import pandas as pd
 
 # --------------------------------------------------
-# 🔑 اپنی YouTube Data API Key یہاں ڈالیں
+# 🔑 YouTube Data API Key
 # --------------------------------------------------
-API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"
+API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"  # <-- اپنی API key ڈالیں
 
 # --------------------------------------------------
-# 🔧 YouTube API initialize کریں
+# Initialize YouTube API
 # --------------------------------------------------
 def get_youtube_service():
     return build("youtube", "v3", developerKey=API_KEY)
 
 # --------------------------------------------------
-# 📅 پچھلے 60 دن کی تاریخ
+# 60 دن پہلے کی تاریخ
 # --------------------------------------------------
 def sixty_days_ago():
     return datetime.utcnow() - timedelta(days=60)
 
 # --------------------------------------------------
-# 🔍 امریکہ کے ٹرینڈنگ ویڈیوز نکالیں
+# US کے Trending ویڈیوز حاصل کریں
 # --------------------------------------------------
 def get_trending_videos(youtube, region_code="US", max_results=50):
     try:
@@ -39,7 +39,7 @@ def get_trending_videos(youtube, region_code="US", max_results=50):
         return []
 
 # --------------------------------------------------
-# 📊 چینل کی تفصیل حاصل کریں
+# چینل کی تفصیل حاصل کریں
 # --------------------------------------------------
 def get_channel_details(youtube, channel_id):
     try:
@@ -48,24 +48,22 @@ def get_channel_details(youtube, channel_id):
             id=channel_id
         )
         response = request.execute()
-        if not response.get("items"):
+        items = response.get("items", [])
+        if not items:
             return None
-
-        item = response["items"][0]
-        snippet = item["snippet"]
-        stats = item["statistics"]
-
+        item = items[0]
+        snippet = item.get("snippet", {})
+        stats = item.get("statistics", {})
         return {
-            "channel_title": snippet.get("title"),
+            "channel_title": snippet.get("title", "Unknown"),
             "channel_created": snippet.get("publishedAt"),
-            "subscribers": int(stats.get("subscriberCount", 0)) if "subscriberCount" in stats else 0,
-            "total_views": int(stats.get("viewCount", 0)) if "viewCount" in stats else 0
+            "subscribers": int(stats.get("subscriberCount", 0)) if stats.get("subscriberCount") else 0
         }
     except Exception:
         return None
 
 # --------------------------------------------------
-# 🧠 ویڈیوز فلٹر کریں اور مکمل ڈیٹا بنائیں
+# ویڈیوز process کریں
 # --------------------------------------------------
 def process_videos(youtube, videos):
     data = []
@@ -80,31 +78,32 @@ def process_videos(youtube, videos):
         video_id = v.get("id")
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         video_views = int(stats.get("viewCount", 0))
-        video_likes = int(stats.get("likeCount", 0)) if "likeCount" in stats else 0
-        video_comments = int(stats.get("commentCount", 0)) if "commentCount" in stats else 0
+        video_likes = int(stats.get("likeCount", 0)) if stats.get("likeCount") else 0
+        video_comments = int(stats.get("commentCount", 0)) if stats.get("commentCount") else 0
         upload_time = snippet.get("publishedAt")
         channel_id = snippet.get("channelId")
 
-        # چینل کی تفصیل لائیں
+        # چینل info لائیں
         channel_info = get_channel_details(youtube, channel_id)
         if not channel_info:
             continue
 
-        # تاریخ parse کریں اور غلطی سے بچائیں
+        # تاریخ parse کریں safely
+        channel_created_str = channel_info.get("channel_created")
         try:
-            channel_created_date = parser.isoparse(channel_info["channel_created"]) if channel_info["channel_created"] else None
+            channel_created_date = parser.isoparse(channel_created_str) if channel_created_str else None
         except Exception:
             channel_created_date = None
 
-        # اگر تاریخ valid نہیں تو skip کریں
-        if not channel_created_date or not isinstance(channel_created_date, datetime):
+        # اگر تاریخ invalid ہے تو skip کریں
+        if channel_created_date is None:
             continue
 
-        # صرف پچھلے 60 دن میں بنے چینلز
+        # 60 دن سے پہلے کے چینلز skip کریں
         if channel_created_date < cutoff_date:
             continue
 
-        # صرف لاکھوں ویوز والی ویڈیوز
+        # صرف ویڈیوز 1M+ ویوز کے ساتھ
         if video_views < 1_000_000:
             continue
 
@@ -116,9 +115,9 @@ def process_videos(youtube, videos):
             "Likes": video_likes,
             "Comments": video_comments,
             "Upload Time": upload_time,
-            "Subscribers": channel_info["subscribers"],
-            "Channel Creation Date": channel_info["channel_created"],
-            "Channel": channel_info["channel_title"]
+            "Subscribers": channel_info.get("subscribers", 0),
+            "Channel Creation Date": channel_created_str,
+            "Channel": channel_info.get("channel_title", "Unknown")
         })
 
     if not data:
@@ -129,32 +128,29 @@ def process_videos(youtube, videos):
     return df
 
 # --------------------------------------------------
-# 🎨 Streamlit UI
+# Streamlit UI
 # --------------------------------------------------
 st.set_page_config(page_title="New US YouTube Channels", page_icon="📺", layout="wide")
+st.title("🇺🇸 YouTube Channels (Last 60 Days & 1M+ Views)")
 
-st.title("🇺🇸 YouTube Channels (Created in Last 60 Days & 1M+ Views)")
 st.markdown("""
-یہ ایپ YouTube Data API کے ذریعے امریکہ کے وہ چینلز دکھاتی ہے  
-جو پچھلے **60 دن** میں بنے ہوں اور جن کی ویڈیوز کے ویوز **1,000,000+** ہوں۔  
-نیچے ہر ویڈیو کی مکمل تفصیل دیکھی جا سکتی ہے۔
+یہ ایپ US کے وہ چینلز دکھاتی ہے جو پچھلے 60 دن میں بنے ہوں اور جن کی ویڈیوز 1,000,000+ ویوز رکھتی ہیں۔
 """)
 
 if st.button("🚀 Fetch Latest Videos"):
-    with st.spinner("📡 YouTube سے ڈیٹا حاصل کیا جا رہا ہے..."):
+    with st.spinner("📡 Fetching data from YouTube..."):
         youtube = get_youtube_service()
         videos = get_trending_videos(youtube, region_code="US", max_results=100)
         df = process_videos(youtube, videos)
 
         if df.empty:
-            st.warning("❗ کوئی نیا چینل نہیں ملا جس کی ویڈیو کے ویوز 1M+ ہوں۔")
+            st.warning("❗ کوئی نیا چینل نہیں ملا جو criteria پورا کرتا ہو۔")
         else:
-            st.success(f"🎉 {len(df)} ویڈیوز ملی ہیں جو شرائط پوری کرتی ہیں۔")
-
+            st.success(f"🎉 {len(df)} ویڈیوز ملی ہیں۔")
             for _, row in df.iterrows():
                 st.markdown(f"## 🎬 [{row['Title']}]({row['URL']})")
                 st.write(f"**Description:** {row['Description']}")
-                st.write(f"**Views:** {row['Views']:,} | 👍 **Likes:** {row['Likes']:,} | 💬 **Comments:** {row['Comments']:,}")
+                st.write(f"**Views:** {row['Views']:,} | 👍 {row['Likes']:,} | 💬 {row['Comments']:,}")
                 st.write(f"**Upload Time:** {row['Upload Time']}")
                 st.write(f"**Channel:** {row['Channel']}")
                 st.write(f"**Subscribers:** {row['Subscribers']:,}")
