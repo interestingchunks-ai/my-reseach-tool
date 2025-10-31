@@ -1,13 +1,13 @@
 import streamlit as st
 from googleapiclient.discovery import build
 from datetime import datetime, timedelta
-from dateutil import parser  # ✅ for flexible date parsing
+from dateutil import parser
 import pandas as pd
 
 # --------------------------------------------------
 # 🔑 اپنی YouTube Data API Key یہاں ڈالیں
 # --------------------------------------------------
-API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"  # ← اپنی اصلی API key یہاں رکھیں
+API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"
 
 # --------------------------------------------------
 # 🔧 YouTube API initialize کریں
@@ -48,7 +48,6 @@ def get_channel_details(youtube, channel_id):
             id=channel_id
         )
         response = request.execute()
-
         if not response.get("items"):
             return None
 
@@ -59,8 +58,8 @@ def get_channel_details(youtube, channel_id):
         return {
             "channel_title": snippet.get("title"),
             "channel_created": snippet.get("publishedAt"),
-            "subscribers": int(stats.get("subscriberCount", 0)),
-            "total_views": int(stats.get("viewCount", 0))
+            "subscribers": int(stats.get("subscriberCount", 0)) if "subscriberCount" in stats else 0,
+            "total_views": int(stats.get("viewCount", 0)) if "viewCount" in stats else 0
         }
     except Exception:
         return None
@@ -91,10 +90,14 @@ def process_videos(youtube, videos):
         if not channel_info:
             continue
 
-        # چینل کی تاریخ کو محفوظ طریقے سے پارس کریں
+        # تاریخ parse کریں اور غلطی سے بچائیں
         try:
-            channel_created_date = parser.isoparse(channel_info["channel_created"])
+            channel_created_date = parser.isoparse(channel_info["channel_created"]) if channel_info["channel_created"] else None
         except Exception:
+            channel_created_date = None
+
+        # اگر تاریخ valid نہیں تو skip کریں
+        if not channel_created_date or not isinstance(channel_created_date, datetime):
             continue
 
         # صرف پچھلے 60 دن میں بنے چینلز
@@ -134,7 +137,7 @@ st.title("🇺🇸 YouTube Channels (Created in Last 60 Days & 1M+ Views)")
 st.markdown("""
 یہ ایپ YouTube Data API کے ذریعے امریکہ کے وہ چینلز دکھاتی ہے  
 جو پچھلے **60 دن** میں بنے ہوں اور جن کی ویڈیوز کے ویوز **1,000,000+** ہوں۔  
-نیچے آپ کو ہر ویڈیو کی مکمل تفصیل نظر آئے گی۔
+نیچے ہر ویڈیو کی مکمل تفصیل دیکھی جا سکتی ہے۔
 """)
 
 if st.button("🚀 Fetch Latest Videos"):
