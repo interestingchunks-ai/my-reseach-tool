@@ -27,10 +27,39 @@ min_views = st.number_input("Minimum views (e.g., 1000000):", min_value=0, value
 recent_channel_days = st.number_input("Channel age limit in days:", min_value=1, max_value=120, value=60)
 
 keywords = [
+    # Keywords for Global History niche
+keywords = [
+    # American History
     "American History", "US History Documentary", "Civil War History",
     "Founding Fathers", "American Revolution", "Native American History",
     "World War 2 USA", "Cold War America", "Presidents of USA History",
-    "History of USA", "US Colonial History", "Gilded Age", "Progressive Era",
+
+    # European History
+    "French Revolution", "Napoleon Bonaparte", "World War 1 History",
+    "World War 2 History", "Roman Empire", "Greek History",
+    "Medieval Europe", "Renaissance History", "Industrial Revolution",
+
+    # Asian History
+    "Chinese Dynasties", "Great Wall of China", "Mughal Empire",
+    "Indian Independence", "Japanese Samurai History", "Meiji Restoration",
+    "Korean History", "Vietnam War History", "Mongol Empire",
+
+    # Middle Eastern & Islamic History
+    "Islamic Golden Age", "Ottoman Empire", "Abbasid Caliphate",
+    "Umayyad Caliphate", "Persian Empire", "Arab History",
+    "Crusades History", "Baghdad History", "Andalusian History",
+
+    # African History
+    "Ancient Egypt", "Pharaohs History", "Pyramids History",
+    "Mali Empire", "Colonial Africa", "Zulu Kingdom",
+    "Ethiopian Empire", "African Independence Movements",
+
+    # Global/World History
+    "Ancient Civilizations", "Mesopotamia History", "Mayan Civilization",
+    "Aztec Empire", "Inca Empire", "Cold War History",
+    "History of Colonialism", "History of Slavery", "History of Democracy",
+    "World History Documentary", "History of Empires", "History of Wars"
+]
 ]
 
 # -----------------------------
