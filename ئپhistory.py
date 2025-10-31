@@ -4,10 +4,13 @@ from datetime import datetime, timedelta
 from dateutil import parser
 import pandas as pd
 
-API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"  # ← اپنی API key یہاں ڈالیں
+# -------------------------
+# 🔹 Config
+# -------------------------
+API_KEY = "AIzaSyC9blOG4-9SFwmJDF29md8qX9QUBztRnWc"  # ← یہاں اپنی API key ڈالیں
 
 # -------------------------
-# YouTube API Helper Functions
+# 🔹 YouTube API Helper Functions
 # -------------------------
 def get_youtube_service():
     return build("youtube", "v3", developerKey=API_KEY)
@@ -49,7 +52,7 @@ def get_channel_details(youtube, channel_id):
         return None
 
 # -------------------------
-# Process Videos (Safe Version)
+# 🔹 Process Videos (Fully Safe)
 # -------------------------
 def process_videos(youtube, videos):
     data = []
@@ -81,12 +84,11 @@ def process_videos(youtube, videos):
             except Exception:
                 channel_created_date = None
 
-        # 🔹 Fully safe checks
-        if channel_created_date is None:
-            continue
-        if not isinstance(channel_created_date, datetime):
-            continue
-        if channel_created_date < cutoff_date:
+        # 🔹 Foolproof check to remove TypeErrors
+        try:
+            if not channel_created_date or channel_created_date < cutoff_date:
+                continue
+        except TypeError:
             continue
 
         # Only videos with 1M+ views
@@ -109,11 +111,10 @@ def process_videos(youtube, videos):
     return pd.DataFrame(data)
 
 # -------------------------
-# Streamlit UI
+# 🔹 Streamlit UI
 # -------------------------
 st.set_page_config(page_title="US New YouTube Channels", page_icon="📺", layout="wide")
 st.title("🇺🇸 US YouTube Channels (Last 60 Days & 1M+ Views)")
-
 st.markdown("یہ ایپ US کے چینلز دکھاتی ہے جو پچھلے 60 دن میں بنے اور جن کی ویڈیوز 1,000,000+ ویوز رکھتی ہیں۔")
 
 if st.button("🚀 Fetch Latest Videos"):
